@@ -55,10 +55,17 @@ lib/
 
 ## Configuração da Tuya Cloud (uma vez)
 
-1. Crie uma conta em <https://iot.tuya.com> e um **Cloud Project** (Smart Home, data center *Western America* para contas do Brasil).
-2. Autorize as APIs *IoT Core* e *Authorization Token Management*.
-3. Em **Devices → Link App Account**, escaneie o QR code com o app Smart Life / Tuya.
-4. Copie `Access ID` e `Access Secret` para o app (tela de configurações — próxima etapa).
+1. Entre em <https://platform.tuya.com> → **Cloud → Development → Create Cloud Project**.
+   - *Industry*: Smart Home · *Development Method*: **Smart Home** · *Data Center*: **Western America** (contas do Brasil).
+2. Na tela de serviços, mantenha *IoT Core*, *Authorization Token Management* e *Smart Home Basic Service*.
+3. No projeto, aba **Devices → Link App Account → Add App Account**: escaneie o QR code com o app
+   Smart Life (*Eu → ícone de leitura no canto superior*). Os dispositivos aparecem em *All Devices*.
+4. Na aba **Overview**, copie `Access ID/Client ID` e `Access Secret/Client Secret` para
+   `tuya_credentials.json` (copie de `tuya_credentials.example.json`; o arquivo é ignorado pelo git).
+
+```bash
+flutter run --dart-define-from-file=tuya_credentials.json
+```
 
 ## Rodando
 

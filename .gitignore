@@ -49,3 +49,6 @@ app.*.map.json
 
 # Local tooling
 .claude/
+
+# Tuya credentials (never commit)
+tuya_credentials.json
