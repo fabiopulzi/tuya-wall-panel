@@ -43,6 +43,14 @@ flutter run --release --dart-define-from-file=tuya_credentials.json
 
 A primeira compilação demora alguns minutos (o Gradle baixa dependências).
 
+> No SM-T710 com LineageOS o `flutter run` compila mas falha ao instalar com
+> `splice failed: EINVAL`. Instale sem streaming e abra o app pelo tablet:
+>
+> ```bash
+> flutter build apk --release --dart-define-from-file=tuya_credentials.json
+> adb install -r --no-streaming build/app/outputs/flutter-apk/app-release.apk
+> ```
+
 ## 4. O que conferir
 
 - [ ] O painel abre em tela cheia, deitado, com os cômodos da sua casa.
@@ -56,11 +64,25 @@ A primeira compilação demora alguns minutos (o Gradle baixa dependências).
 - [ ] **Sem internet:** desligue a internet do roteador (Wi-Fi ligado) — as luzes
       continuam respondendo pelo painel.
 
+## Personalizar o painel
+
+Botão ⚙ no canto superior direito (ou o ⚙ dentro de um cômodo):
+
+- **Arraste** uma tecla pela alça ⠿ (ou segure a linha) para reordenar, solte sobre outro
+  cômodo na lista da esquerda para mover, ou sobre **Ocultas** para tirar do painel
+  (bom para as teclas em paralelo).
+- Toque no nome do cômodo ou no lápis da tecla para **renomear**; no ícone do cômodo para trocá-lo.
+- **Novo cômodo**, **Excluir** (as teclas vão para Ocultas) e **Restaurar Smart Life**.
+- No painel, **segure uma tecla** para renomear ou ocultar direto.
+
+Nada disso muda o app Smart Life. Fica salvo no tablet e sobrevive a versões novas do app
+(`adb install -r`); só se perde se o app for desinstalado ou os dados dele forem apagados.
+
 ## 5. Instalar de vez (sem o cabo)
 
 ```bash
 flutter build apk --release --dart-define-from-file=tuya_credentials.json
-adb install -r build/app/outputs/flutter-apk/app-release.apk
+adb install -r --no-streaming build/app/outputs/flutter-apk/app-release.apk
 ```
 
 O app aparece no tablet como **Painel Casa**.

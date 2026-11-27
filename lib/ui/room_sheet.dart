@@ -6,6 +6,8 @@ import '../app/theme.dart';
 import '../models/models.dart';
 import '../state/home_controller.dart';
 import 'room_icons.dart';
+import 'settings/dialogs.dart';
+import 'settings/layout_editor_page.dart';
 import 'widgets/channel_tile.dart';
 
 Future<void> showRoomSheet(
@@ -129,6 +131,27 @@ class _RoomSheet extends StatelessWidget {
                           const SizedBox(width: AppSpace.md),
                         ],
                         IconButton(
+                          tooltip: 'Personalizar este cômodo',
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            LayoutEditorPage.open(
+                              context,
+                              controller,
+                              roomId: room.id,
+                            );
+                          },
+                          iconSize: 24,
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceHigh,
+                            fixedSize: const Size(52, 52),
+                          ),
+                          icon: const Icon(
+                            Icons.tune_rounded,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpace.sm),
+                        IconButton(
                           onPressed: () => Navigator.of(context).pop(),
                           iconSize: 28,
                           style: IconButton.styleFrom(
@@ -161,6 +184,7 @@ class _RoomSheet extends StatelessWidget {
                             channel: c,
                             pending: controller.isPending(c.id),
                             onTap: () => controller.toggle(c),
+                            onLongPress: () => _renameOrHide(context, c),
                           );
                         },
                       ),
@@ -173,6 +197,35 @@ class _RoomSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _renameOrHide(BuildContext context, Channel c) async {
+    final original = controller.channel(c.id)?.name;
+    final result = await showNameDialog(
+      context,
+      title: 'Tecla',
+      initial: c.name,
+      original: original,
+      offerHide: true,
+    );
+    switch (result) {
+      case null:
+        return;
+      case hideRequest:
+        await controller.hideChannel(c.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '"${c.name}" saiu do painel. Para trazer de volta, use '
+                'Personalizar → Ocultas.',
+              ),
+            ),
+          );
+        }
+      case final name:
+        await controller.renameChannel(c.id, name == original ? null : name);
+    }
   }
 }
 

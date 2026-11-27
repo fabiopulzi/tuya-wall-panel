@@ -49,13 +49,14 @@ pensada para rodar 24h num tablet Android fixo na parede.
 lib/
   main.dart                   ponto de entrada, modo imersivo / tela sempre ligada
   app/theme.dart              design system (cores, tipografia, espaçamentos)
-  models/                     Room, Channel, Scene, LocalDeviceInfo
+  models/                     Room, Channel, Scene, LocalDeviceInfo, PanelLayout
   data/                       repositórios (demo, nuvem, híbrido) e cache
   tuya/tuya_cloud_client.dart cliente assinado da Tuya OpenAPI
   tuya/local/                 protocolo LAN: framing/cripto, conexão, descoberta
   state/home_controller.dart  estado e ações (otimista, refresh, pushes)
-  ui/                         telas e widgets (dashboard, cards, detalhe do cômodo)
-test/                         45 testes: protocolo (vetores oficiais AES/GCM),
+  ui/                         telas e widgets (dashboard, cards, detalhe do cômodo,
+                              settings/ = tela "Personalizar painel")
+test/                         58 testes: protocolo (vetores oficiais AES/GCM),
                               dispositivo simulado 3.3/3.4/3.5, repositório, estado
 tool/                         diagnósticos de linha de comando (ver docs/TABLET.md)
 ```
@@ -100,8 +101,8 @@ adb install build/app/outputs/flutter-apk/app-release.apk
 - [x] Cliente Tuya Cloud: casas, cômodos, dispositivos, nomes das teclas
 - [x] Controle local (LAN) com push em tempo real e fallback para nuvem
 - [x] Cache no tablet: abre na hora e funciona sem internet
-- [ ] Primeiro teste no tablet
-- [ ] Renomear teclas e reordenar cômodos no próprio painel
+- [x] Primeiro teste no tablet
+- [x] Personalizar no próprio painel: cômodos, ordem, nomes e teclas ocultas (arrastar e soltar)
 - [ ] Tela de configuração (credenciais sem recompilar)
 - [ ] Cenas ("Boa noite", "Chegando em casa", "Apagar tudo")
 - [ ] Modo painel: protetor de tela com relógio, brilho automático, iniciar no boot

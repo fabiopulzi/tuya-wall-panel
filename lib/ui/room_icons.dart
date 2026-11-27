@@ -2,7 +2,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../models/models.dart';
 
-const _byKey = <String, IconData>{
+/// Icons a room can use, by key (stored in the panel layout).
+const roomIcons = <String, IconData>{
   'sofa': Icons.weekend_rounded,
   'kitchen': Icons.kitchen_rounded,
   'dining': Icons.dinner_dining_rounded,
@@ -17,6 +18,13 @@ const _byKey = <String, IconData>{
   'stairs': Icons.stairs_rounded,
   'balcony': Icons.balcony_rounded,
   'kids': Icons.toys_rounded,
+  'closet': Icons.checkroom_rounded,
+  'tv': Icons.tv_rounded,
+  'baby': Icons.child_friendly_rounded,
+  'gym': Icons.fitness_center_rounded,
+  'entrance': Icons.door_front_door_rounded,
+  'deck': Icons.deck_rounded,
+  'light': Icons.light_rounded,
   'home': Icons.home_rounded,
 };
 
@@ -51,17 +59,22 @@ const _guesses = <(String, String)>[
   ('varanda', 'balcony'),
   ('sacada', 'balcony'),
   ('brinquedo', 'kids'),
+  ('closet', 'closet'),
+  ('entrada', 'entrance'),
+  ('hall', 'entrance'),
+  ('academia', 'gym'),
+  ('bebê', 'baby'),
   ('sala', 'sofa'),
   ('living', 'sofa'),
 ];
 
 IconData iconForRoom(Room room) {
-  if (room.icon case final key? when _byKey.containsKey(key)) {
-    return _byKey[key]!;
+  if (room.icon case final key? when roomIcons.containsKey(key)) {
+    return roomIcons[key]!;
   }
   final name = room.name.toLowerCase();
   for (final (word, key) in _guesses) {
-    if (name.contains(word)) return _byKey[key]!;
+    if (name.contains(word)) return roomIcons[key]!;
   }
   return Icons.home_rounded;
 }

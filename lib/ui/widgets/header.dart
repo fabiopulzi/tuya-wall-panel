@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/theme.dart';
 import '../../models/models.dart';
 import '../../state/home_controller.dart';
+import '../settings/layout_editor_page.dart';
 
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({super.key, required this.controller});
@@ -57,11 +58,11 @@ class _ClockState extends State<_Clock> {
   }
 
   static const _weekdays = [
-    'Segunda-feira',
-    'Terça-feira',
-    'Quarta-feira',
-    'Quinta-feira',
-    'Sexta-feira',
+    'Segunda',
+    'Terça',
+    'Quarta',
+    'Quinta',
+    'Sexta',
     'Sábado',
     'Domingo',
   ];
@@ -101,6 +102,8 @@ class _ClockState extends State<_Clock> {
         Text(
           '$_greeting  ·  ${_weekdays[_now.weekday - 1]}, '
           '${_now.day} de ${_months[_now.month - 1]}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: text.bodyMedium?.copyWith(fontSize: 16),
         ),
       ],
@@ -159,6 +162,9 @@ class _Status extends StatelessWidget {
           ),
         const SizedBox(width: AppSpace.xs),
         _AllOffButton(enabled: lights > 0, onPressed: controller.allLightsOff),
+        _SettingsButton(
+          onPressed: () => LayoutEditorPage.open(context, controller),
+        ),
       ],
     );
   }
@@ -246,4 +252,29 @@ class _AllOffButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SettingsButton extends StatelessWidget {
+  const _SettingsButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppColors.surface,
+    shape: const CircleBorder(side: BorderSide(color: AppColors.border)),
+    child: InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onPressed,
+      child: const SizedBox(
+        width: 44,
+        height: 44,
+        child: Icon(
+          Icons.tune_rounded,
+          size: 20,
+          color: AppColors.textSecondary,
+        ),
+      ),
+    ),
+  );
 }

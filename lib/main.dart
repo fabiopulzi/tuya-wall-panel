@@ -7,6 +7,7 @@ import 'app/theme.dart';
 import 'data/demo_repository.dart';
 import 'data/home_repository.dart';
 import 'data/hybrid_repository.dart';
+import 'data/prefs_layout_store.dart';
 import 'data/prefs_snapshot_cache.dart';
 import 'data/tuya_cloud_repository.dart';
 import 'state/home_controller.dart';
@@ -54,7 +55,10 @@ Future<void> main() async {
           transport: createLocalTransport(),
         );
 
-  final controller = HomeController(repository)..load();
+  // The layout set up on the tablet lives in its own store, so neither a
+  // cloud sync nor a new app version overwrites it.
+  final controller = HomeController(repository, layouts: PrefsLayoutStore())
+    ..load();
   runApp(WallPanelApp(controller: controller));
 }
 

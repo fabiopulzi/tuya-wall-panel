@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../data/home_repository.dart';
 import '../data/hybrid_repository.dart';
 import '../models/models.dart';
+import '../models/panel_layout.dart';
 
 /// Holds the house state and applies actions optimistically: the UI flips
 /// immediately and rolls back if the device does not answer.
@@ -18,9 +19,11 @@ class HomeController extends ChangeNotifier {
     this.refreshEvery = const Duration(seconds: 8),
     this.followUps = const [Duration(milliseconds: 1500), Duration(seconds: 4)],
     this.settleTime = const Duration(seconds: 3),
-  });
+    LayoutStore? layouts,
+  }) : _layouts = layouts ?? MemoryLayoutStore();
 
   final HomeRepository _repo;
+  final LayoutStore _layouts;
   final Duration refreshEvery;
 
   /// Refreshes scheduled after each command, to catch linked switches.
@@ -31,7 +34,6 @@ class HomeController extends ChangeNotifier {
   final Duration settleTime;
 
   String homeName = '';
-  List<Room> rooms = const [];
   List<Scene> scenes = const [];
   final Map<String, Channel> _channels = {};
   final Set<String> _pending = {};
@@ -51,10 +53,90 @@ class HomeController extends ChangeNotifier {
   bool _refreshing = false;
   bool _refreshAgain = false;
 
+  /// Rooms and keys as the cloud describes them.
+  List<Room> _baseRooms = const [];
+
+  /// The customization made on the tablet, if any.
+  PanelLayout? _layout;
+  bool _layoutRead = false;
+
+  /// [_layout] (or the cloud layout) resolved against the current keys.
+  PanelLayout _view = PanelLayout(rooms: const []);
+
+  /// Every key of the house, with its original name (hidden ones included).
   Iterable<Channel> get channels => _channels.values;
 
-  List<Channel> channelsIn(String roomId) =>
-      _channels.values.where((c) => c.roomId == roomId).toList();
+  /// Rooms shown on the panel, in order. Empty rooms are left out.
+  List<Room> get rooms => [
+    for (final r in _view.rooms)
+      if (r.channelIds.isNotEmpty) r.toRoom(),
+  ];
+
+  /// Keys shown in a room, in order, with their panel names.
+  List<Channel> channelsIn(String roomId) => [
+    for (final id in _view.room(roomId)?.channelIds ?? const <String>[])
+      if (_channels[id] case final c?) _display(c),
+  ];
+
+  /// Keys on the panel (not hidden), with their panel names.
+  Iterable<Channel> get visibleChannels => [
+    for (final r in _view.rooms) ...channelsIn(r.id),
+  ];
+
+  Channel _display(Channel c) => switch (_view.names[c.id]) {
+    final name? => c.copyWith(name: name),
+    null => c,
+  };
+
+  /// Name on the panel for a key.
+  String nameOf(String channelId) =>
+      _view.names[channelId] ?? _channels[channelId]?.name ?? channelId;
+
+  Channel? channel(String id) => _channels[id];
+
+  /// Smart Life room name of a key, for the settings screen.
+  String? originalRoomName(String channelId) {
+    final roomId = _channels[channelId]?.roomId;
+    for (final r in _baseRooms) {
+      if (r.id == roomId) return r.name;
+    }
+    return null;
+  }
+
+  bool get isCustomized => _layout != null;
+
+  /// What the settings screen starts from: the saved layout, or the cloud
+  /// layout when nothing was customized yet.
+  PanelLayout get editableLayout => _view;
+
+  /// Applies and saves a new layout (settings screen, rename on long press).
+  Future<void> updateLayout(PanelLayout layout) async {
+    _layout = layout;
+    _rebuildView();
+    notifyListeners();
+    await _layouts.write(layout);
+  }
+
+  /// Back to the Smart Life rooms and names.
+  Future<void> resetLayout() async {
+    _layout = null;
+    _rebuildView();
+    notifyListeners();
+    await _layouts.write(null);
+  }
+
+  Future<void> renameChannel(String channelId, String? name) =>
+      updateLayout(_view.renameChannel(channelId, name));
+
+  Future<void> hideChannel(String channelId) =>
+      updateLayout(_view.moveChannel(channelId));
+
+  void _rebuildView() {
+    final channels = _channels.values.toList();
+    _view = (_layout ?? PanelLayout.fromHome(_baseRooms, channels)).normalized(
+      channels,
+    );
+  }
 
   bool isPending(String channelId) => _pending.contains(channelId);
 
@@ -68,13 +150,13 @@ class HomeController extends ChangeNotifier {
   };
   ({int local, int total})? _lastLan;
 
-  int get lightsOn => _channels.values
+  int get lightsOn => visibleChannels
       .where((c) => c.kind == DeviceKind.light && c.isOn && c.online)
       .length;
 
   /// Running non-light loads, pumps first (they matter most at a glance).
   List<Channel> get activeLoads =>
-      _channels.values
+      visibleChannels
           .where((c) => c.kind != DeviceKind.light && c.isOn && c.online)
           .toList()
         ..sort(
@@ -88,13 +170,22 @@ class HomeController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      if (!_layoutRead) {
+        _layoutRead = true;
+        try {
+          _layout = await _layouts.read();
+        } on Object {
+          _layout = null;
+        }
+      }
       final snap = await _repo.load();
       homeName = snap.homeName;
-      rooms = snap.rooms;
+      _baseRooms = snap.rooms;
       scenes = snap.scenes;
       _channels
         ..clear()
         ..addEntries(snap.channels.map((c) => MapEntry(c.id, c)));
+      _rebuildView();
       _pushSub ??= _repo.pushes.listen(_applyPush);
       _snapSub ??= _repo.snapshots.listen(_applySnapshot);
       _timer?.cancel();
@@ -127,7 +218,7 @@ class HomeController extends ChangeNotifier {
       _scheduleFollowUps();
     } catch (_) {
       _channels[channel.id] = current;
-      failures.value = 'Não foi possível acionar "${current.name}"';
+      failures.value = 'Não foi possível acionar "${nameOf(current.id)}"';
     } finally {
       _pending.remove(channel.id);
       notifyListeners();
@@ -138,12 +229,13 @@ class HomeController extends ChangeNotifier {
   /// nobody wants the pool filter to stop because they left the room.
   Future<void> setRoomLights(String roomId, bool on) => Future.wait([
     for (final c in channelsIn(roomId))
-      if (c.kind == DeviceKind.light) set(c, on),
+      if (c.kind == DeviceKind.light && c.online) set(c, on),
   ]);
 
+  /// Hidden keys are left alone: they mirror a key that is on the panel.
   Future<void> allLightsOff() => Future.wait([
-    for (final c in _channels.values)
-      if (c.kind == DeviceKind.light && c.isOn) set(c, false),
+    for (final c in visibleChannels)
+      if (c.kind == DeviceKind.light && c.isOn && c.online) set(c, false),
   ]);
 
   Future<void> runScene(Scene scene) => Future.wait([
@@ -169,7 +261,7 @@ class HomeController extends ChangeNotifier {
   /// A newer house layout arrived (cloud sync after a cached start).
   void _applySnapshot(HomeSnapshot snap) {
     homeName = snap.homeName;
-    rooms = snap.rooms;
+    _baseRooms = snap.rooms;
     scenes = snap.scenes;
     final previous = Map.of(_channels);
     _channels
@@ -183,6 +275,7 @@ class HomeController extends ChangeNotifier {
           return MapEntry(c.id, keep ? c.copyWith(isOn: local.isOn) : c);
         }),
       );
+    _rebuildView();
     notifyListeners();
   }
 

@@ -11,11 +11,15 @@ class ChannelTile extends StatelessWidget {
     required this.channel,
     required this.pending,
     required this.onTap,
+    this.onLongPress,
   });
 
   final Channel channel;
   final bool pending;
   final VoidCallback onTap;
+
+  /// Opens the rename / hide options for this key.
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +51,7 @@ class ChannelTile extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.tile),
           onTap: channel.online ? onTap : null,
+          onLongPress: onLongPress,
           child: Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
