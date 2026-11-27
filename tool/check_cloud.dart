@@ -29,7 +29,7 @@ Future<void> main(List<String> args) async {
     for (final c in chs) {
       stdout.writeln(
         '  ${c.isOn ? '●' : '○'} ${c.name.padRight(32)} '
-        '${c.kind.name.padRight(6)} ${c.online ? '' : 'OFFLINE'}',
+        '${c.kind.name.padRight(6)} dp${c.dp} ${c.online ? '' : 'OFFLINE'}',
       );
     }
   }

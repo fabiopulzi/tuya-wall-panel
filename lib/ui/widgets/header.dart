@@ -146,6 +146,17 @@ class _Status extends StatelessWidget {
             color: AppColors.textSecondary,
             label: '${loads.length - 1}',
           ),
+        if (controller.lanStatus case (:final local, :final total)
+            when total > 0)
+          _Chip(
+            icon: local > 0 ? Icons.wifi_rounded : Icons.cloud_outlined,
+            color: local == total
+                ? AppColors.plug
+                : local > 0
+                ? AppColors.light
+                : AppColors.textTertiary,
+            label: local > 0 ? 'Rede local $local/$total' : 'Via nuvem',
+          ),
         const SizedBox(width: AppSpace.xs),
         _AllOffButton(enabled: lights > 0, onPressed: controller.allLightsOff),
       ],

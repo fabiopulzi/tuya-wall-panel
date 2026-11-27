@@ -31,6 +31,12 @@ class FakeCloud implements HomeRepository {
   int refreshes = 0;
 
   @override
+  Stream<List<Channel>> get pushes => const Stream.empty();
+
+  @override
+  Stream<HomeSnapshot> get snapshots => const Stream.empty();
+
+  @override
   Future<HomeSnapshot> load() async =>
       HomeSnapshot(homeName: 'Casa', rooms: const [], channels: _initial);
 

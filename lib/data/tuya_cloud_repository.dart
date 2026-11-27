@@ -53,12 +53,25 @@ class TuyaCloudRepository implements HomeRepository {
     const unassigned = Room(id: '_none', name: 'Outros');
     final roomNames = {for (final r in rooms) r.id: r.name};
 
+    final localDevices = <String, LocalDeviceInfo>{};
+
     Future<List<Channel>> channelsOf(Map<String, dynamic> summary) async {
       final id = summary['id'] as String;
       final info = await client.device(id);
-      final status = (info['status'] as List? ?? const [])
-          .cast<Map<String, dynamic>>();
-      final switches = status
+      if (info['local_key'] case final String key when key.length == 16) {
+        localDevices[id] = LocalDeviceInfo(id: id, localKey: key);
+      }
+
+      // Shadow properties carry dp ids and gang names; fall back to the
+      // plain status list on older APIs.
+      List<Map<String, dynamic>> props;
+      try {
+        props = await client.shadowProperties(id);
+      } on Object {
+        props = (info['status'] as List? ?? const [])
+            .cast<Map<String, dynamic>>();
+      }
+      final switches = props
           .where(
             (s) =>
                 _switchCode.hasMatch(s['code'] as String) && s['value'] is bool,
@@ -67,25 +80,19 @@ class TuyaCloudRepository implements HomeRepository {
       if (switches.isEmpty) return const [];
 
       final deviceName = info['name'] as String? ?? id;
-      var gangNames = const <String, String>{};
-      if (switches.length > 1) {
-        try {
-          gangNames = await client.subSwitchNames(id);
-        } on Object {
-          // Older devices don't support custom gang names.
-        }
-      }
-
       final kind = _kindFor(info['category'] as String?, deviceName);
       return [
         for (final (i, s) in switches.indexed)
           Channel(
             deviceId: id,
             code: s['code'] as String,
+            dp: '${s['dp_id'] ?? _guessDp(s['code'] as String)}',
             name: channelName(
               deviceName: deviceName,
               roomName: roomNames[roomOf[id]] ?? '',
-              gangName: gangNames[s['code']],
+              gangName: (s['custom_name'] as String?)?.trim().isEmpty ?? true
+                  ? null
+                  : s['custom_name'] as String,
               gang: switches.length > 1 ? i + 1 : null,
             ),
             kind: kind,
@@ -108,8 +115,15 @@ class TuyaCloudRepository implements HomeRepository {
       homeName: home['name'] as String? ?? 'Casa',
       rooms: rooms,
       channels: channels,
+      localDevices: localDevices,
     );
   }
+
+  @override
+  Stream<List<Channel>> get pushes => const Stream.empty();
+
+  @override
+  Stream<HomeSnapshot> get snapshots => const Stream.empty();
 
   @override
   Future<void> setChannel(Channel channel, bool on) =>
@@ -175,6 +189,12 @@ class TuyaCloudRepository implements HomeRepository {
 
   /// Most Tuya relays (`kg`, `tdq`, `pc`) drive lights in practice, so the
   /// name decides: "Motor Piscina" is a pump, "Tomada ..." is a plug.
+  /// `switch_3` → 3, `switch`/`switch_1` → 1, `switch_led` → 20.
+  static int _guessDp(String code) {
+    if (code.startsWith('switch_led')) return 20;
+    return int.tryParse(code.split('_').last) ?? 1;
+  }
+
   DeviceKind _kindFor(String? category, String name) {
     if (_pumpName.hasMatch(name)) return DeviceKind.pump;
     if (category == 'cz' || _plugName.hasMatch(name)) return DeviceKind.plug;

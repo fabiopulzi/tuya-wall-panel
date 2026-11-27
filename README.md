@@ -24,8 +24,11 @@ pensada para rodar 24h num tablet Android fixo na parede.
 │            │                                                               │
 │      HomeRepository (interface)                                            │
 │        ├── DemoRepository     → dados fictícios, para desenvolver o layout │
-│        ├── TuyaCloudRepository→ Tuya OpenAPI (descoberta + fallback)       │
-│        └── TuyaLocalRepository→ protocolo LAN (TCP 6668)  [próxima etapa]  │
+│        └── HybridRepository   → local primeiro, nuvem como reserva         │
+│              ├── cache no tablet (abre na hora, funciona offline)          │
+│              ├── TuyaDiscovery     → UDP 6666/6667/7000 (IP e versão)      │
+│              ├── TuyaDeviceConnection → TCP 6668, 3.3/3.4/3.5, push        │
+│              └── TuyaCloudRepository  → descoberta, chaves e fallback      │
 └────────────────────────────────────────────────────────────────────────────┘
           │ HTTPS (descoberta, local keys, cômodos)        │ Wi-Fi local (controle)
           ▼                                                 ▼
@@ -44,14 +47,20 @@ pensada para rodar 24h num tablet Android fixo na parede.
 
 ```
 lib/
-  main.dart                 ponto de entrada, modo imersivo / tela sempre ligada
-  app/theme.dart            design system (cores, tipografia, espaçamentos)
-  models/                   Room, Device, DeviceChannel, Scene
-  data/                     HomeRepository + implementações (demo, cloud)
-  tuya/tuya_cloud_client.dart  cliente assinado da Tuya OpenAPI
-  state/home_controller.dart   estado e ações (ligar, desligar, cenas)
-  ui/                       telas e widgets (dashboard, cards, detalhe do cômodo)
+  main.dart                   ponto de entrada, modo imersivo / tela sempre ligada
+  app/theme.dart              design system (cores, tipografia, espaçamentos)
+  models/                     Room, Channel, Scene, LocalDeviceInfo
+  data/                       repositórios (demo, nuvem, híbrido) e cache
+  tuya/tuya_cloud_client.dart cliente assinado da Tuya OpenAPI
+  tuya/local/                 protocolo LAN: framing/cripto, conexão, descoberta
+  state/home_controller.dart  estado e ações (otimista, refresh, pushes)
+  ui/                         telas e widgets (dashboard, cards, detalhe do cômodo)
+test/                         45 testes: protocolo (vetores oficiais AES/GCM),
+                              dispositivo simulado 3.3/3.4/3.5, repositório, estado
+tool/                         diagnósticos de linha de comando (ver docs/TABLET.md)
 ```
+
+**Instalar no tablet:** veja [docs/TABLET.md](docs/TABLET.md).
 
 ## Configuração da Tuya Cloud (uma vez)
 
@@ -88,9 +97,12 @@ adb install build/app/outputs/flutter-apk/app-release.apk
 ## Roadmap
 
 - [x] Design system e dashboard de cômodos com dados demo
-- [ ] Cliente Tuya Cloud: descoberta de casas, cômodos e dispositivos
-- [ ] Tela de configuração (credenciais, ordem dos cômodos, ícones)
-- [ ] Controle local (LAN) com fallback para nuvem
+- [x] Cliente Tuya Cloud: casas, cômodos, dispositivos, nomes das teclas
+- [x] Controle local (LAN) com push em tempo real e fallback para nuvem
+- [x] Cache no tablet: abre na hora e funciona sem internet
+- [ ] Primeiro teste no tablet
+- [ ] Renomear teclas e reordenar cômodos no próprio painel
+- [ ] Tela de configuração (credenciais sem recompilar)
 - [ ] Cenas ("Boa noite", "Chegando em casa", "Apagar tudo")
 - [ ] Modo painel: protetor de tela com relógio, brilho automático, iniciar no boot
 - [ ] Controle de carga da bateria via tomada inteligente

@@ -80,6 +80,13 @@ class TuyaCloudClient {
   ) async => ((await get('/v1.0/homes/$homeId/rooms/$roomId/devices')) as List)
       .cast<Map<String, dynamic>>();
 
+  /// Every data point with its `code`, numeric `dp_id`, current `value` and
+  /// the user's `custom_name` (gang names from the Smart Life app).
+  Future<List<Map<String, dynamic>>> shadowProperties(String deviceId) async {
+    final result = await get('/v2.0/cloud/thing/$deviceId/shadow/properties');
+    return ((result as Map)['properties'] as List).cast<Map<String, dynamic>>();
+  }
+
   /// Names given to each gang of a multi-gang switch in the Smart Life app.
   Future<Map<String, String>> subSwitchNames(String deviceId) async {
     final result = await get('/v1.0/devices/$deviceId/multiple-names');

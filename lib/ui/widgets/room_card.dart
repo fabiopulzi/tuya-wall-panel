@@ -26,9 +26,9 @@ class RoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lights = channels.where((c) => c.kind == DeviceKind.light).toList();
-    final lightsOn = lights.where((c) => c.isOn).length;
+    final lightsOn = lights.where((c) => c.isOn && c.online).length;
     final loadsOn = channels
-        .where((c) => c.kind != DeviceKind.light && c.isOn)
+        .where((c) => c.kind != DeviceKind.light && c.isOn && c.online)
         .toList();
     final active = lightsOn > 0 || loadsOn.isNotEmpty;
     final accent = lightsOn > 0

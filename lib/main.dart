@@ -6,8 +6,11 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'app/theme.dart';
 import 'data/demo_repository.dart';
 import 'data/home_repository.dart';
+import 'data/hybrid_repository.dart';
+import 'data/prefs_snapshot_cache.dart';
 import 'data/tuya_cloud_repository.dart';
 import 'state/home_controller.dart';
+import 'tuya/local/platform_local.dart';
 import 'tuya/tuya_cloud_client.dart';
 import 'ui/dashboard_page.dart';
 
@@ -35,15 +38,20 @@ Future<void> main() async {
 
   final HomeRepository repository = _accessId.isEmpty
       ? DemoRepository()
-      : TuyaCloudRepository(
-          TuyaCloudClient(
-            accessId: _accessId,
-            accessSecret: _accessSecret,
-            baseUrl: _baseUrl.isNotEmpty
-                ? _baseUrl
-                : 'https://openapi.tuya$_region.com',
+      : HybridRepository(
+          cloud: TuyaCloudRepository(
+            TuyaCloudClient(
+              accessId: _accessId,
+              accessSecret: _accessSecret,
+              baseUrl: _baseUrl.isNotEmpty
+                  ? _baseUrl
+                  : 'https://openapi.tuya$_region.com',
+            ),
+            homeName: _home.isEmpty ? null : _home,
           ),
-          homeName: _home.isEmpty ? null : _home,
+          cache: PrefsSnapshotCache(),
+          // LAN control on Android; null in the web preview (no sockets).
+          transport: createLocalTransport(),
         );
 
   final controller = HomeController(repository)..load();

@@ -164,4 +164,10 @@ class DemoRepository implements HomeRepository {
 
   @override
   Future<List<Channel>> refresh(List<Channel> current) async => current;
+
+  @override
+  Stream<List<Channel>> get pushes => const Stream.empty();
+
+  @override
+  Stream<HomeSnapshot> get snapshots => const Stream.empty();
 }

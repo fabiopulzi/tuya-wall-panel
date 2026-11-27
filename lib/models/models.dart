@@ -15,6 +15,7 @@ class Channel {
     required this.name,
     required this.kind,
     required this.roomId,
+    this.dp,
     this.isOn = false,
     this.online = true,
   });
@@ -26,6 +27,9 @@ class Channel {
   final String name;
   final DeviceKind kind;
   final String roomId;
+
+  /// Data point id used by the local protocol (`switch_2` is usually "2").
+  final String? dp;
   final bool isOn;
   final bool online;
 
@@ -37,6 +41,7 @@ class Channel {
     name: name ?? this.name,
     kind: kind,
     roomId: roomId,
+    dp: dp,
     isOn: isOn ?? this.isOn,
     online: online ?? this.online,
   );
@@ -75,10 +80,52 @@ class HomeSnapshot {
     required this.rooms,
     required this.channels,
     this.scenes = const [],
+    this.localDevices = const {},
   });
 
   final String homeName;
   final List<Room> rooms;
   final List<Channel> channels;
   final List<Scene> scenes;
+
+  /// Local keys (and last known IPs) per device id, for LAN control.
+  final Map<String, LocalDeviceInfo> localDevices;
+}
+
+/// What the panel needs to talk to a device on the LAN.
+class LocalDeviceInfo {
+  const LocalDeviceInfo({
+    required this.id,
+    required this.localKey,
+    this.ip,
+    this.version,
+  });
+
+  final String id;
+  final String localKey;
+  final String? ip;
+
+  /// Protocol version as announced, e.g. "3.3".
+  final String? version;
+
+  LocalDeviceInfo copyWith({String? ip, String? version}) => LocalDeviceInfo(
+    id: id,
+    localKey: localKey,
+    ip: ip ?? this.ip,
+    version: version ?? this.version,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'localKey': localKey,
+    'ip': ip,
+    'version': version,
+  };
+
+  factory LocalDeviceInfo.fromJson(Map<String, Object?> j) => LocalDeviceInfo(
+    id: j['id']! as String,
+    localKey: j['localKey']! as String,
+    ip: j['ip'] as String?,
+    version: j['version'] as String?,
+  );
 }

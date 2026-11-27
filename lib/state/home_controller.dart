@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/home_repository.dart';
+import '../data/hybrid_repository.dart';
 import '../models/models.dart';
 
 /// Holds the house state and applies actions optimistically: the UI flips
@@ -45,6 +46,8 @@ class HomeController extends ChangeNotifier {
   final List<Timer> _followUpTimers = [];
   final Map<String, Timer> _settling = {};
   final Map<String, int> _edits = {};
+  StreamSubscription<List<Channel>>? _pushSub;
+  StreamSubscription<HomeSnapshot>? _snapSub;
   bool _refreshing = false;
   bool _refreshAgain = false;
 
@@ -55,14 +58,24 @@ class HomeController extends ChangeNotifier {
 
   bool isPending(String channelId) => _pending.contains(channelId);
 
+  /// How many devices answer on the LAN, or null without LAN support.
+  ({int local, int total})? get lanStatus => switch (_repo) {
+    final HybridRepository h when h.transport != null => (
+      local: h.localCount,
+      total: h.localTotal,
+    ),
+    _ => null,
+  };
+  ({int local, int total})? _lastLan;
+
   int get lightsOn => _channels.values
-      .where((c) => c.kind == DeviceKind.light && c.isOn)
+      .where((c) => c.kind == DeviceKind.light && c.isOn && c.online)
       .length;
 
   /// Running non-light loads, pumps first (they matter most at a glance).
   List<Channel> get activeLoads =>
       _channels.values
-          .where((c) => c.kind != DeviceKind.light && c.isOn)
+          .where((c) => c.kind != DeviceKind.light && c.isOn && c.online)
           .toList()
         ..sort(
           (a, b) => (a.kind == DeviceKind.pump ? 0 : 1).compareTo(
@@ -82,6 +95,8 @@ class HomeController extends ChangeNotifier {
       _channels
         ..clear()
         ..addEntries(snap.channels.map((c) => MapEntry(c.id, c)));
+      _pushSub ??= _repo.pushes.listen(_applyPush);
+      _snapSub ??= _repo.snapshots.listen(_applySnapshot);
       _timer?.cancel();
       _timer = Timer.periodic(refreshEvery, (_) => refreshNow());
     } catch (e) {
@@ -136,6 +151,41 @@ class HomeController extends ChangeNotifier {
       if (_channels[key] case final c?) set(c, value),
   ]);
 
+  /// A device reported its own state over the LAN: authoritative and
+  /// instant, so it wins over everything except a command still in flight.
+  void _applyPush(List<Channel> pushed) {
+    var changed = false;
+    for (final c in pushed) {
+      final local = _channels[c.id];
+      if (local == null || _pending.contains(c.id)) continue;
+      if (local.isOn != c.isOn || local.online != c.online) {
+        _channels[c.id] = local.copyWith(isOn: c.isOn, online: c.online);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// A newer house layout arrived (cloud sync after a cached start).
+  void _applySnapshot(HomeSnapshot snap) {
+    homeName = snap.homeName;
+    rooms = snap.rooms;
+    scenes = snap.scenes;
+    final previous = Map.of(_channels);
+    _channels
+      ..clear()
+      ..addEntries(
+        snap.channels.map((c) {
+          final local = previous[c.id];
+          final keep =
+              local != null &&
+              (_pending.contains(c.id) || _settling.containsKey(c.id));
+          return MapEntry(c.id, keep ? c.copyWith(isOn: local.isOn) : c);
+        }),
+      );
+    notifyListeners();
+  }
+
   /// Debounced: a burst of taps ("Apagar tudo") yields one set of
   /// follow-up refreshes, timed from the last command.
   void _scheduleFollowUps() {
@@ -173,6 +223,11 @@ class HomeController extends ChangeNotifier {
           changed = true;
         }
       }
+      final lan = lanStatus;
+      if (lan != _lastLan) {
+        _lastLan = lan;
+        changed = true;
+      }
       if (changed) notifyListeners();
     } catch (_) {
       // Keep the last known state; the next tick will try again.
@@ -188,6 +243,8 @@ class HomeController extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    _pushSub?.cancel();
+    _snapSub?.cancel();
     for (final t in [..._followUpTimers, ..._settling.values]) {
       t.cancel();
     }
