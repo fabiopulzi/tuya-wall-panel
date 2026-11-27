@@ -24,8 +24,11 @@ pensada para rodar 24h num tablet Android fixo na parede.
 │            │                                                               │
 │      HomeRepository (interface)                                            │
 │        ├── DemoRepository     → dados fictícios, para desenvolver o layout │
-│        ├── TuyaCloudRepository→ Tuya OpenAPI (descoberta + fallback)       │
-│        └── TuyaLocalRepository→ protocolo LAN (TCP 6668)  [próxima etapa]  │
+│        └── HybridRepository   → local primeiro, nuvem como reserva         │
+│              ├── cache no tablet (abre na hora, funciona offline)          │
+│              ├── TuyaDiscovery     → UDP 6666/6667/7000 (IP e versão)      │
+│              ├── TuyaDeviceConnection → TCP 6668, 3.3/3.4/3.5, push        │
+│              └── TuyaCloudRepository  → descoberta, chaves e fallback      │
 └────────────────────────────────────────────────────────────────────────────┘
           │ HTTPS (descoberta, local keys, cômodos)        │ Wi-Fi local (controle)
           ▼                                                 ▼
@@ -44,23 +47,46 @@ pensada para rodar 24h num tablet Android fixo na parede.
 
 ```
 lib/
-  main.dart                 ponto de entrada, modo imersivo / tela sempre ligada
-  app/theme.dart            design system (cores, tipografia, espaçamentos)
-  models/                   Room, Device, DeviceChannel, Scene
-  data/                     HomeRepository + implementações (demo, cloud)
-  tuya/tuya_cloud_client.dart  cliente assinado da Tuya OpenAPI
-  state/home_controller.dart   estado e ações (ligar, desligar, cenas)
-  ui/                       telas e widgets (dashboard, cards, detalhe do cômodo)
+  main.dart                   ponto de entrada, modo imersivo / tela sempre ligada
+  app/theme.dart              design system (cores, tipografia, espaçamentos)
+  models/                     Room, Channel, Scene, LocalDeviceInfo, PanelLayout
+  data/                       repositórios (demo, nuvem, híbrido) e cache
+  tuya/tuya_cloud_client.dart cliente assinado da Tuya OpenAPI
+  tuya/local/                 protocolo LAN: framing/cripto, conexão, descoberta
+  state/home_controller.dart  estado e ações (otimista, refresh, pushes)
+  ui/                         telas e widgets (dashboard, cards, detalhe do cômodo,
+                              settings/ = tela "Personalizar painel")
+test/                         58 testes: protocolo (vetores oficiais AES/GCM),
+                              dispositivo simulado 3.3/3.4/3.5, repositório, estado
+tool/                         diagnósticos de linha de comando (ver docs/TABLET.md)
 ```
+
+**Instalar no tablet:** veja [docs/TABLET.md](docs/TABLET.md).
 
 ## Configuração da Tuya Cloud (uma vez)
 
-1. Crie uma conta em <https://iot.tuya.com> e um **Cloud Project** (Smart Home, data center *Western America* para contas do Brasil).
-2. Autorize as APIs *IoT Core* e *Authorization Token Management*.
-3. Em **Devices → Link App Account**, escaneie o QR code com o app Smart Life / Tuya.
-4. Copie `Access ID` e `Access Secret` para o app (tela de configurações — próxima etapa).
+1. Entre em <https://platform.tuya.com> → **Cloud → Development → Create Cloud Project**.
+   - *Industry*: Smart Home · *Development Method*: **Smart Home** · *Data Center*: **Western America** (contas do Brasil).
+2. Na tela de serviços, mantenha *IoT Core*, *Authorization Token Management* e *Smart Home Basic Service*.
+3. No projeto, aba **Devices → Link App Account → Add App Account**: escaneie o QR code com o app
+   Smart Life (*Eu → ícone de leitura no canto superior*). Os dispositivos aparecem em *All Devices*.
+4. Na aba **Overview**, copie `Access ID/Client ID` e `Access Secret/Client Secret` para
+   `tuya_credentials.json` (copie de `tuya_credentials.example.json`; o arquivo é ignorado pelo git).
+
+```bash
+flutter run --dart-define-from-file=tuya_credentials.json
+```
 
 ## Rodando
+
+```bash
+dart run tool/check_cloud.dart            # lista a casa vinda da Tuya Cloud (sem UI)
+
+# preview no navegador com a casa real (a Tuya não aceita CORS, então use o proxy local)
+python3 tool/dev_proxy.py us
+flutter run -d chrome --dart-define-from-file=tuya_credentials.json \
+  --dart-define=TUYA_BASE_URL=http://127.0.0.1:8787
+```
 
 ```bash
 flutter pub get
@@ -72,9 +98,12 @@ adb install build/app/outputs/flutter-apk/app-release.apk
 ## Roadmap
 
 - [x] Design system e dashboard de cômodos com dados demo
-- [ ] Cliente Tuya Cloud: descoberta de casas, cômodos e dispositivos
-- [ ] Tela de configuração (credenciais, ordem dos cômodos, ícones)
-- [ ] Controle local (LAN) com fallback para nuvem
+- [x] Cliente Tuya Cloud: casas, cômodos, dispositivos, nomes das teclas
+- [x] Controle local (LAN) com push em tempo real e fallback para nuvem
+- [x] Cache no tablet: abre na hora e funciona sem internet
+- [x] Primeiro teste no tablet
+- [x] Personalizar no próprio painel: cômodos, ordem, nomes e teclas ocultas (arrastar e soltar)
+- [ ] Tela de configuração (credenciais sem recompilar)
 - [ ] Cenas ("Boa noite", "Chegando em casa", "Apagar tudo")
 - [ ] Modo painel: protetor de tela com relógio, brilho automático, iniciar no boot
 - [ ] Controle de carga da bateria via tomada inteligente
