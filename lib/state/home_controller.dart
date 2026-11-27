@@ -7,11 +7,27 @@ import '../models/models.dart';
 
 /// Holds the house state and applies actions optimistically: the UI flips
 /// immediately and rolls back if the device does not answer.
+///
+/// One switch can change others: two keys wired in parallel, or Tuya
+/// multi-control links. So every command is followed by quick refreshes of
+/// the whole house, on top of the regular polling.
 class HomeController extends ChangeNotifier {
-  HomeController(this._repo, {this.refreshEvery = const Duration(seconds: 20)});
+  HomeController(
+    this._repo, {
+    this.refreshEvery = const Duration(seconds: 8),
+    this.followUps = const [Duration(milliseconds: 1500), Duration(seconds: 4)],
+    this.settleTime = const Duration(seconds: 3),
+  });
 
   final HomeRepository _repo;
   final Duration refreshEvery;
+
+  /// Refreshes scheduled after each command, to catch linked switches.
+  final List<Duration> followUps;
+
+  /// After a command, the cloud may still report the old value for a moment;
+  /// the commanded channel ignores refreshes for this long.
+  final Duration settleTime;
 
   String homeName = '';
   List<Room> rooms = const [];
@@ -26,6 +42,11 @@ class HomeController extends ChangeNotifier {
   final ValueNotifier<String?> failures = ValueNotifier(null);
 
   Timer? _timer;
+  final List<Timer> _followUpTimers = [];
+  final Map<String, Timer> _settling = {};
+  final Map<String, int> _edits = {};
+  bool _refreshing = false;
+  bool _refreshAgain = false;
 
   Iterable<Channel> get channels => _channels.values;
 
@@ -62,7 +83,7 @@ class HomeController extends ChangeNotifier {
         ..clear()
         ..addEntries(snap.channels.map((c) => MapEntry(c.id, c)));
       _timer?.cancel();
-      _timer = Timer.periodic(refreshEvery, (_) => _refresh());
+      _timer = Timer.periodic(refreshEvery, (_) => refreshNow());
     } catch (e) {
       error = e;
     } finally {
@@ -79,9 +100,16 @@ class HomeController extends ChangeNotifier {
 
     _channels[channel.id] = current.copyWith(isOn: on);
     _pending.add(channel.id);
+    _edits.update(channel.id, (n) => n + 1, ifAbsent: () => 1);
     notifyListeners();
     try {
       await _repo.setChannel(current, on);
+      _settling[channel.id]?.cancel();
+      _settling[channel.id] = Timer(
+        settleTime,
+        () => _settling.remove(channel.id),
+      );
+      _scheduleFollowUps();
     } catch (_) {
       _channels[channel.id] = current;
       failures.value = 'Não foi possível acionar "${current.name}"';
@@ -108,23 +136,61 @@ class HomeController extends ChangeNotifier {
       if (_channels[key] case final c?) set(c, value),
   ]);
 
-  Future<void> _refresh() async {
-    if (_pending.isNotEmpty) return;
+  /// Debounced: a burst of taps ("Apagar tudo") yields one set of
+  /// follow-up refreshes, timed from the last command.
+  void _scheduleFollowUps() {
+    for (final t in _followUpTimers) {
+      t.cancel();
+    }
+    _followUpTimers
+      ..clear()
+      ..addAll(followUps.map((d) => Timer(d, refreshNow)));
+  }
+
+  /// Pulls the latest state of every channel. Channels with a command in
+  /// flight, still settling, or edited while the request was out keep their
+  /// local state; everything else follows the cloud.
+  Future<void> refreshNow() async {
+    if (_refreshing) {
+      _refreshAgain = true;
+      return;
+    }
+    _refreshing = true;
     try {
+      final editsBefore = Map.of(_edits);
       final fresh = await _repo.refresh(_channels.values.toList());
-      if (_pending.isNotEmpty) return;
+      var changed = false;
       for (final c in fresh) {
-        _channels[c.id] = c;
+        final local = _channels[c.id];
+        if (local == null ||
+            _pending.contains(c.id) ||
+            _settling.containsKey(c.id) ||
+            _edits[c.id] != editsBefore[c.id]) {
+          continue;
+        }
+        if (local.isOn != c.isOn || local.online != c.online) {
+          _channels[c.id] = c;
+          changed = true;
+        }
       }
-      notifyListeners();
+      if (changed) notifyListeners();
     } catch (_) {
       // Keep the last known state; the next tick will try again.
+    } finally {
+      _refreshing = false;
+      if (_refreshAgain) {
+        _refreshAgain = false;
+        unawaited(refreshNow());
+      }
     }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    for (final t in [..._followUpTimers, ..._settling.values]) {
+      t.cancel();
+    }
     failures.dispose();
     super.dispose();
   }

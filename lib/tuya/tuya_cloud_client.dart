@@ -95,6 +95,25 @@ class TuyaCloudClient {
       ((await get('/v1.0/devices/$deviceId/status')) as List)
           .cast<Map<String, dynamic>>();
 
+  /// Status of many devices in one request per 20 ids.
+  Future<Map<String, List<Map<String, dynamic>>>> batchStatus(
+    List<String> deviceIds,
+  ) async {
+    final out = <String, List<Map<String, dynamic>>>{};
+    for (var i = 0; i < deviceIds.length; i += 20) {
+      final chunk = deviceIds.sublist(i, min(i + 20, deviceIds.length));
+      final result = await get(
+        '/v1.0/iot-03/devices/status',
+        query: {'device_ids': chunk.join(',')},
+      );
+      for (final d in (result as List).cast<Map<String, dynamic>>()) {
+        out[d['id'] as String] = (d['status'] as List)
+            .cast<Map<String, dynamic>>();
+      }
+    }
+    return out;
+  }
+
   Future<void> sendCommand(String deviceId, String code, Object value) =>
       post('/v1.0/devices/$deviceId/commands', {
         'commands': [

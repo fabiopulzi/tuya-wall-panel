@@ -33,5 +33,15 @@ Future<void> main(List<String> args) async {
       );
     }
   }
+  final sw = Stopwatch()..start();
+  final fresh = await repo.refresh(snap.channels);
+  final diff = [
+    for (final (i, c) in fresh.indexed)
+      if (c.isOn != snap.channels[i].isOn) c.name,
+  ];
+  stdout.writeln(
+    '\nrefresh em lote: ${fresh.length} canais em ${sw.elapsedMilliseconds} ms'
+    '${diff.isEmpty ? '' : ' · mudaram: ${diff.join(', ')}'}',
+  );
   exit(0);
 }

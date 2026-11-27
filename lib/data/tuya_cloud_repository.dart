@@ -117,27 +117,21 @@ class TuyaCloudRepository implements HomeRepository {
 
   @override
   Future<List<Channel>> refresh(List<Channel> current) async {
-    final byDevice = <String, List<Channel>>{};
-    for (final c in current) {
-      (byDevice[c.deviceId] ??= []).add(c);
-    }
-    final out = <Channel>[];
-    for (final entry in byDevice.entries) {
-      try {
-        final status = {
-          for (final s in await client.status(entry.key)) s['code']: s['value'],
-        };
-        out.addAll(
-          entry.value.map((c) {
-            final v = status[c.code];
-            return v is bool ? c.copyWith(isOn: v, online: true) : c;
-          }),
-        );
-      } on Object {
-        out.addAll(entry.value.map((c) => c.copyWith(online: false)));
-      }
-    }
-    return out;
+    final ids = {for (final c in current) c.deviceId}.toList();
+    final statuses = await client.batchStatus(ids);
+    return [
+      for (final c in current)
+        switch (statuses[c.deviceId]) {
+          // Missing from the reply: the cloud has no live state for it.
+          null => c,
+          final status => switch (status
+              .where((s) => s['code'] == c.code)
+              .firstOrNull?['value']) {
+            final bool v => c.copyWith(isOn: v),
+            _ => c,
+          },
+        },
+    ];
   }
 
   /// Runs [task] over [items] with at most [concurrency] requests in flight,
