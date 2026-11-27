@@ -87,11 +87,57 @@ IconData iconForChannel(Channel c) => switch (c.kind) {
   DeviceKind.other => Icons.toggle_on_rounded,
 };
 
-IconData iconForScene(String key) => switch (key) {
-  'night' => Icons.bedtime_rounded,
-  'home' => Icons.door_front_door_rounded,
-  'dinner' => Icons.restaurant_rounded,
-  'party' => Icons.celebration_rounded,
-  'movie' => Icons.movie_rounded,
-  _ => Icons.auto_awesome_rounded,
+/// Icons an action can use, by key.
+const actionIcons = <String, IconData>{
+  'dinner': Icons.restaurant_rounded,
+  'movie': Icons.movie_rounded,
+  'night': Icons.bedtime_rounded,
+  'home': Icons.door_front_door_rounded,
+  'party': Icons.celebration_rounded,
+  'sun': Icons.wb_sunny_rounded,
+  'relax': Icons.spa_rounded,
+  'book': Icons.menu_book_rounded,
+  'coffee': Icons.coffee_rounded,
+  'pool': Icons.pool_rounded,
+  'garden': Icons.yard_rounded,
+  'away': Icons.luggage_rounded,
+  'light': Icons.lightbulb_rounded,
+  'star': Icons.auto_awesome_rounded,
 };
+
+const _actionGuesses = <(String, String)>[
+  ('jantar', 'dinner'),
+  ('almoço', 'dinner'),
+  ('almoco', 'dinner'),
+  ('refeição', 'dinner'),
+  ('filme', 'movie'),
+  ('cinema', 'movie'),
+  ('tv', 'movie'),
+  ('noite', 'night'),
+  ('dormir', 'night'),
+  ('chegando', 'home'),
+  ('chegada', 'home'),
+  ('casa', 'home'),
+  ('festa', 'party'),
+  ('manhã', 'sun'),
+  ('manha', 'sun'),
+  ('acordar', 'sun'),
+  ('relax', 'relax'),
+  ('leitura', 'book'),
+  ('ler', 'book'),
+  ('café', 'coffee'),
+  ('cafe', 'coffee'),
+  ('piscina', 'pool'),
+  ('jardim', 'garden'),
+  ('viagem', 'away'),
+  ('saindo', 'away'),
+];
+
+IconData iconForScene(String key, {String name = ''}) {
+  if (actionIcons[key] case final icon?) return icon;
+  final lower = name.toLowerCase();
+  for (final (word, k) in _actionGuesses) {
+    if (lower.contains(word)) return actionIcons[k]!;
+  }
+  return Icons.auto_awesome_rounded;
+}

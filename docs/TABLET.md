@@ -78,6 +78,17 @@ Botão ⚙ no canto superior direito (ou o ⚙ dentro de um cômodo):
 Nada disso muda o app Smart Life. Fica salvo no tablet e sobrevive a versões novas do app
 (`adb install -r`); só se perde se o app for desinstalado ou os dados dele forem apagados.
 
+## Modo painel (aba Painel em ⚙)
+
+- **Protetor de tela:** relógio em tela preta depois de 1, 2, 5 ou 10 min sem toque (ou nunca).
+  O relógio muda de lugar a cada minuto para não marcar a tela. O primeiro toque só acorda.
+- **Brilho:** em uso, segue o brilho do Android (ligue o *brilho adaptativo* lá, se quiser);
+  no protetor, fica no nível escolhido, e mais escuro das 22h às 6h.
+- **Iniciar com o tablet:** toque em **Definir** e escolha **Painel Casa** como app de tela
+  inicial (“Sempre”). Assim ele abre sozinho quando o tablet liga e no botão Home.
+  Para usar outros apps, **Ajustes do Android** → Apps; para desfazer, **Trocar** e escolha
+  o launcher original (Trebuchet / Launcher3).
+
 ## 5. Instalar de vez (sem o cabo)
 
 ```bash

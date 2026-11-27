@@ -163,6 +163,88 @@ void main() {
       expect(c.failures.value, isNull);
     });
 
+    test('"Apagar tudo" turns off only the chosen keys', () async {
+      final motor = Channel(
+        deviceId: 'motor',
+        code: 'switch_1',
+        name: 'Motor',
+        kind: DeviceKind.pump,
+        roomId: 'cozinha',
+        isOn: true,
+      );
+      final plug = Channel(
+        deviceId: 'plug',
+        code: 'switch_1',
+        name: 'Tomada',
+        kind: DeviceKind.plug,
+        roomId: 'cozinha',
+        isOn: true,
+      );
+      repo.channels = [..._channels, motor, plug];
+      await c.load();
+
+      // Default: lights only; the pump on a timer is left alone.
+      expect(c.inAllOff(motor), isFalse);
+      // Take light "b" out, add the socket in.
+      await c.updateLayout(
+        c.editableLayout
+            .setAllOff(c.channel(_id('b'))!, false)
+            .setAllOff(plug, true),
+      );
+      await c.allLightsOff();
+      expect(repo.commands, [_id('a'), _id('plug')]);
+
+      final back = PanelLayout.decode(store.value!.encode());
+      expect(back.allOff, {_id('b'): false, _id('plug'): true});
+      expect(back.resetAllOff().allOff, isEmpty);
+    });
+
+    test('actions run their keys and are saved', () async {
+      repo.channels = [
+        ..._channels,
+        _ch('d', 'cozinha', on: true).copyWith(online: false),
+      ];
+      await c.load();
+      var l = c.editableLayout
+          .addAction(const PanelAction(id: 'j', name: 'Hora do jantar'))
+          .setActionState('j', _id('c'), true) // on
+          .setActionState('j', _id('a'), false) // off
+          .setActionState('j', _id('d'), true); // offline: skipped
+      l = l
+          .setActionState('j', _id('b'), true)
+          .setActionState('j', _id('b'), null);
+      await c.updateLayout(l);
+
+      expect(c.scenes.map((s) => s.name), ['Hora do jantar']);
+      await c.runScene(c.scenes.single);
+      expect(repo.commands, [_id('c'), _id('a')]);
+
+      final back = PanelLayout.decode(store.value!.encode());
+      expect(back.actions.single.states, {
+        _id('c'): true,
+        _id('a'): false,
+        _id('d'): true,
+      });
+    });
+
+    test('actions can be renamed, reordered and deleted', () async {
+      var l = c.editableLayout
+          .addAction(const PanelAction(id: 'j', name: 'Jantar'))
+          .addAction(const PanelAction(id: 'f', name: 'Filme'))
+          .updateAction('j', name: 'Hora do jantar', icon: 'dinner')
+          .reorderActions(1, 0);
+      expect(l.actions.map((a) => a.name), ['Filme', 'Hora do jantar']);
+      expect(l.action('j')!.icon, 'dinner');
+      l = l.removeAction('f');
+      await c.updateLayout(l);
+      expect(c.scenes.map((s) => s.id), ['j']);
+      // Removed keys are dropped from actions too.
+      final n = l
+          .setActionState('j', 'gone:switch_1', true)
+          .normalized(_channels);
+      expect(n.action('j')!.states, isEmpty);
+    });
+
     test('panel names show on the panel only', () async {
       await c.renameChannel(_id('a'), 'Lustre');
       expect(c.channelsIn('sala').first.name, 'Lustre');
