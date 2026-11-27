@@ -16,6 +16,9 @@ import 'ui/dashboard_page.dart';
 const _accessId = String.fromEnvironment('TUYA_ACCESS_ID');
 const _accessSecret = String.fromEnvironment('TUYA_ACCESS_SECRET');
 const _region = String.fromEnvironment('TUYA_REGION', defaultValue: 'us');
+const _home = String.fromEnvironment('TUYA_HOME');
+// Dev only: point the web preview at tool/dev_proxy.py (Tuya has no CORS).
+const _baseUrl = String.fromEnvironment('TUYA_BASE_URL');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,8 +39,11 @@ Future<void> main() async {
           TuyaCloudClient(
             accessId: _accessId,
             accessSecret: _accessSecret,
-            baseUrl: 'https://openapi.tuya$_region.com',
+            baseUrl: _baseUrl.isNotEmpty
+                ? _baseUrl
+                : 'https://openapi.tuya$_region.com',
           ),
+          homeName: _home.isEmpty ? null : _home,
         );
 
   final controller = HomeController(repository)..load();

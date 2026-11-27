@@ -70,6 +70,15 @@ flutter run --dart-define-from-file=tuya_credentials.json
 ## Rodando
 
 ```bash
+dart run tool/check_cloud.dart            # lista a casa vinda da Tuya Cloud (sem UI)
+
+# preview no navegador com a casa real (a Tuya não aceita CORS, então use o proxy local)
+python3 tool/dev_proxy.py us
+flutter run -d chrome --dart-define-from-file=tuya_credentials.json \
+  --dart-define=TUYA_BASE_URL=http://127.0.0.1:8787
+```
+
+```bash
 flutter pub get
 flutter run -d chrome                     # preview do layout com dados demo
 flutter build apk --release               # APK para o tablet

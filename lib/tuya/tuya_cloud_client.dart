@@ -58,6 +58,13 @@ class TuyaCloudClient {
     return out;
   }
 
+  /// Device ids that belong to a home. Fails with "permission deny" for
+  /// homes where the linked account is only a member.
+  Future<Set<String>> homeDeviceIds(int homeId) async =>
+      ((await get('/v1.0/homes/$homeId/devices')) as List)
+          .map((d) => (d as Map)['id'] as String)
+          .toSet();
+
   Future<List<Map<String, dynamic>>> homes(String uid) async =>
       ((await get('/v1.0/users/$uid/homes')) as List)
           .cast<Map<String, dynamic>>();
@@ -75,10 +82,12 @@ class TuyaCloudClient {
 
   /// Names given to each gang of a multi-gang switch in the Smart Life app.
   Future<Map<String, String>> subSwitchNames(String deviceId) async {
-    final result = await get('/v1.0/devices/$deviceId/multiple-name');
+    final result = await get('/v1.0/devices/$deviceId/multiple-names');
     return {
       for (final e in (result as List).cast<Map<String, dynamic>>())
-        e['identifier'] as String: e['name'] as String,
+        if ((e['name'] as String?)?.trim() case final name?
+            when name.isNotEmpty)
+          e['identifier'] as String: name,
     };
   }
 
