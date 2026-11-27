@@ -18,6 +18,8 @@ class PanelLayout {
     required this.rooms,
     Iterable<String> hidden = const [],
     this.names = const {},
+    this.allOff = const {},
+    this.actions = const [],
   }) : hidden = {...hidden};
 
   /// Rooms in display order; each lists its visible keys in display order.
@@ -28,6 +30,15 @@ class PanelLayout {
 
   /// Panel-only names, by channel id.
   final Map<String, String> names;
+
+  /// Who "Apagar tudo" turns off, where it differs from the default (lights
+  /// yes, sockets and pumps no). A pool pump on a timer stays out.
+  final Map<String, bool> allOff;
+
+  /// Actions created on the tablet ("Hora do jantar", "Hora do filme"), in
+  /// display order. "Apagar tudo" is not one of them: it is fixed, lives in
+  /// the header and is configured through [allOff].
+  final List<PanelAction> actions;
 
   static const newRoomId = '_new';
 
@@ -68,11 +79,81 @@ class PanelLayout {
     List<LayoutRoom>? rooms,
     Iterable<String>? hidden,
     Map<String, String>? names,
+    Map<String, bool>? allOff,
+    List<PanelAction>? actions,
   }) => PanelLayout(
     rooms: rooms ?? this.rooms,
     hidden: hidden ?? this.hidden,
     names: names ?? this.names,
+    allOff: allOff ?? this.allOff,
+    actions: actions ?? this.actions,
   );
+
+  PanelAction? action(String id) {
+    for (final a in actions) {
+      if (a.id == id) return a;
+    }
+    return null;
+  }
+
+  PanelLayout addAction(PanelAction action) =>
+      _copy(actions: [...actions, action]);
+
+  PanelLayout updateAction(String id, {String? name, String? icon}) => _copy(
+    actions: [
+      for (final a in actions)
+        if (a.id == id) a.copyWith(name: name?.trim(), icon: icon) else a,
+    ],
+  );
+
+  PanelLayout removeAction(String id) => _copy(
+    actions: [
+      for (final a in actions)
+        if (a.id != id) a,
+    ],
+  );
+
+  /// Moves the action at [oldIndex] so it ends up at [newIndex].
+  PanelLayout reorderActions(int oldIndex, int newIndex) {
+    final next = [...actions];
+    final a = next.removeAt(oldIndex);
+    next.insert(newIndex.clamp(0, next.length), a);
+    return _copy(actions: next);
+  }
+
+  /// What an action does to a key: true turns it on, false off, null leaves
+  /// it alone.
+  PanelLayout setActionState(String actionId, String channelId, bool? state) =>
+      _copy(
+        actions: [
+          for (final a in actions)
+            if (a.id == actionId)
+              a.copyWith(
+                states: {
+                  for (final MapEntry(:key, :value) in a.states.entries)
+                    if (key != channelId) key: value,
+                  channelId: ?state,
+                },
+              )
+            else
+              a,
+        ],
+      );
+
+  /// Whether "Apagar tudo" turns [c] off.
+  bool inAllOff(Channel c) => allOff[c.id] ?? c.kind == DeviceKind.light;
+
+  /// Sets whether "Apagar tudo" turns [c] off; the default is not stored.
+  PanelLayout setAllOff(Channel c, bool on) => _copy(
+    allOff: {
+      for (final MapEntry(:key, :value) in allOff.entries)
+        if (key != c.id) key: value,
+      if (on != (c.kind == DeviceKind.light)) c.id: on,
+    },
+  );
+
+  /// Back to "lights only".
+  PanelLayout resetAllOff() => _copy(allOff: const {});
 
   /// Moves a key into [toRoom] at [index] (end when null), or hides it when
   /// [toRoom] is null.
@@ -188,6 +269,19 @@ class PanelLayout {
         for (final MapEntry(:key, :value) in names.entries)
           if (known.contains(key)) key: value,
       },
+      allOff: {
+        for (final MapEntry(:key, :value) in allOff.entries)
+          if (known.contains(key)) key: value,
+      },
+      actions: [
+        for (final a in actions)
+          a.copyWith(
+            states: {
+              for (final MapEntry(:key, :value) in a.states.entries)
+                if (known.contains(key)) key: value,
+            },
+          ),
+      ],
     );
   }
 
@@ -196,6 +290,8 @@ class PanelLayout {
     'rooms': [for (final r in rooms) r.toJson()],
     'hidden': [...hidden],
     'names': names,
+    'allOff': allOff,
+    'actions': [for (final a in actions) a.toJson()],
   };
 
   factory PanelLayout.fromJson(Map<String, Object?> j) => PanelLayout(
@@ -205,6 +301,11 @@ class PanelLayout {
     ],
     hidden: [for (final h in (j['hidden'] as List?) ?? const []) h as String],
     names: ((j['names'] as Map?) ?? const {}).cast<String, String>(),
+    allOff: ((j['allOff'] as Map?) ?? const {}).cast<String, bool>(),
+    actions: [
+      for (final a in (j['actions'] as List?) ?? const [])
+        PanelAction.fromJson((a as Map).cast()),
+    ],
   );
 
   String encode() => jsonEncode(toJson());
@@ -250,6 +351,54 @@ class LayoutRoom {
     channelIds: [
       for (final c in (j['channels'] as List?) ?? const []) c as String,
     ],
+  );
+}
+
+/// A one-tap action on the panel: sets some keys on, some off, and leaves
+/// the rest alone.
+class PanelAction {
+  const PanelAction({
+    required this.id,
+    required this.name,
+    this.icon,
+    this.states = const {},
+  });
+
+  final String id;
+  final String name;
+
+  /// Icon key (see `ui/room_icons.dart`); guessed from the name when null.
+  final String? icon;
+
+  /// Channel id → desired state. Keys not listed are left alone.
+  final Map<String, bool> states;
+
+  PanelAction copyWith({
+    String? name,
+    String? icon,
+    Map<String, bool>? states,
+  }) => PanelAction(
+    id: id,
+    name: (name == null || name.isEmpty) ? this.name : name,
+    icon: icon ?? this.icon,
+    states: states ?? this.states,
+  );
+
+  Scene toScene() =>
+      Scene(id: id, name: name, icon: icon ?? '', actions: states);
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'icon': icon,
+    'states': states,
+  };
+
+  factory PanelAction.fromJson(Map<String, Object?> j) => PanelAction(
+    id: j['id']! as String,
+    name: j['name']! as String,
+    icon: j['icon'] as String?,
+    states: ((j['states'] as Map?) ?? const {}).cast<String, bool>(),
   );
 }
 

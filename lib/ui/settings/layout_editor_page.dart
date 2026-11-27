@@ -5,7 +5,9 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/theme.dart';
 import '../../models/models.dart';
 import '../../models/panel_layout.dart';
+import '../../models/panel_settings.dart';
 import '../../state/home_controller.dart';
+import '../../state/panel_mode.dart';
 import '../room_icons.dart';
 import 'dialogs.dart';
 
@@ -39,6 +41,7 @@ class LayoutEditorPage extends StatefulWidget {
 }
 
 const _hiddenId = '\u0000hidden';
+const _allOffId = '\u0000allOff';
 
 class _LayoutEditorPageState extends State<LayoutEditorPage> {
   HomeController get c => widget.controller;
@@ -55,11 +58,19 @@ class _LayoutEditorPageState extends State<LayoutEditorPage> {
   Offset? _dragPos;
   String? _dragging;
 
+  /// 0: rooms and keys, 1: actions.
+  int _tab = 0;
+
+  /// Action open in the "Ações" tab.
+  String _action = _allOffId;
+  final _actionScroll = ScrollController();
+
   @override
   void dispose() {
     _scrollTimer?.cancel();
     _roomScroll.dispose();
     _keyScroll.dispose();
+    _actionScroll.dispose();
     super.dispose();
   }
 
@@ -207,6 +218,48 @@ class _LayoutEditorPageState extends State<LayoutEditorPage> {
     });
   }
 
+  Future<void> _addAction() async {
+    final name = await showNameDialog(context, title: 'Nova ação', initial: '');
+    if (name == null || name.isEmpty) return;
+    final id = 'a${DateTime.now().millisecondsSinceEpoch}';
+    _apply(layout.addAction(PanelAction(id: id, name: name)));
+    setState(() => _action = id);
+    _toast('Toque nas teclas para escolher o que "$name" faz');
+  }
+
+  Future<void> _renameAction(PanelAction a) async {
+    final name = await showNameDialog(
+      context,
+      title: 'Nome da ação',
+      initial: a.name,
+    );
+    if (name == null || name.isEmpty) return;
+    _apply(layout.updateAction(a.id, name: name));
+  }
+
+  Future<void> _pickActionIcon(PanelAction a) async {
+    final icon = await showIconPicker(
+      context,
+      selected: a.icon,
+      icons: actionIcons,
+      title: 'Ícone da ação',
+    );
+    if (icon != null) _apply(layout.updateAction(a.id, icon: icon));
+  }
+
+  Future<void> _deleteAction(PanelAction a) async {
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Excluir "${a.name}"?',
+      message: 'A ação sai da tela principal. Nenhuma luz é acionada.',
+      confirmLabel: 'Excluir',
+      destructive: true,
+    );
+    if (!ok) return;
+    _apply(layout.removeAction(a.id));
+    setState(() => _action = _allOffId);
+  }
+
   void _toast(String message) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
@@ -228,20 +281,32 @@ class _LayoutEditorPageState extends State<LayoutEditorPage> {
               children: [
                 _TopBar(
                   customized: c.isCustomized,
+                  tab: _tab,
+                  onTab: (t) => setState(() => _tab = t),
                   onBack: () => Navigator.of(context).pop(),
-                  onAddRoom: _addRoom,
                   onReset: _reset,
                 ),
                 const SizedBox(height: AppSpace.lg),
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(width: 300, child: _buildRooms()),
-                      const SizedBox(width: AppSpace.lg),
-                      Expanded(child: _buildKeys()),
-                    ],
-                  ),
+                  child: _tab == 2
+                      ? _buildPanelTab()
+                      : _tab == 1
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(width: 300, child: _buildActionList()),
+                            const SizedBox(width: AppSpace.lg),
+                            Expanded(child: _buildActionEditor()),
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(width: 300, child: _buildRooms()),
+                            const SizedBox(width: AppSpace.lg),
+                            Expanded(child: _buildKeys()),
+                          ],
+                        ),
                 ),
               ],
             ),
@@ -256,9 +321,25 @@ class _LayoutEditorPageState extends State<LayoutEditorPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
-            child: _SectionLabel('CÔMODOS'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 10, 4),
+            child: Row(
+              children: [
+                const Expanded(child: _SectionLabel('CÔMODOS')),
+                TextButton.icon(
+                  onPressed: _addRoom,
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Novo'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.light,
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: ReorderableListView.builder(
@@ -310,6 +391,434 @@ class _LayoutEditorPageState extends State<LayoutEditorPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActionList() {
+    final actions = layout.actions;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 10, 4),
+            child: Row(
+              children: [
+                const Expanded(child: _SectionLabel('AÇÕES')),
+                TextButton.icon(
+                  onPressed: _addAction,
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Nova'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.light,
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Fixed: always first, cannot be deleted or moved.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: _RoomTile(
+              icon: Icons.power_settings_new_rounded,
+              name: 'Apagar tudo',
+              count: [
+                for (final ch in c.visibleChannels)
+                  if (layout.inAllOff(ch)) ch,
+              ].length,
+              selected: _action == _allOffId,
+              dragging: null,
+              locked: true,
+              accepts: (_) => false,
+              onTap: () => setState(() => _action = _allOffId),
+              onDrop: (_) {},
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            child: Divider(height: 1, color: AppColors.border),
+          ),
+          Expanded(
+            child: actions.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.fromLTRB(22, 12, 22, 0),
+                    child: Text(
+                      'Crie ações como "Hora do jantar" ou "Hora do filme" '
+                      'no botão Nova. Elas aparecem acima dos cômodos.',
+                      style: TextStyle(
+                        fontSize: 15,
+                        height: 1.5,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  )
+                : ReorderableListView.builder(
+                    scrollController: _actionScroll,
+                    buildDefaultDragHandles: false,
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    itemCount: actions.length,
+                    onReorderItem: (from, to) =>
+                        _apply(layout.reorderActions(from, to)),
+                    proxyDecorator: (child, _, _) => Material(
+                      color: Colors.transparent,
+                      elevation: 10,
+                      shadowColor: Colors.black54,
+                      borderRadius: BorderRadius.circular(18),
+                      child: child,
+                    ),
+                    itemBuilder: (context, i) {
+                      final a = actions[i];
+                      return _RoomTile(
+                        key: ValueKey(a.id),
+                        index: i,
+                        icon: iconForScene(a.icon ?? '', name: a.name),
+                        name: a.name,
+                        count: a.states.length,
+                        selected: a.id == _action,
+                        dragging: null,
+                        accepts: (_) => false,
+                        onTap: () => setState(() => _action = a.id),
+                        onDrop: (_) {},
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionEditor() {
+    final text = Theme.of(context).textTheme;
+    final action = layout.action(_action);
+    final sections = [
+      for (final r in layout.rooms)
+        if (r.channelIds.isNotEmpty) r,
+    ];
+
+    final Widget header;
+    if (action == null) {
+      header = Row(
+        children: [
+          const _IconBox(icon: Icons.power_settings_new_rounded),
+          const SizedBox(width: AppSpace.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Apagar tudo', style: text.headlineMedium),
+                    const SizedBox(width: AppSpace.sm),
+                    const Icon(
+                      Icons.lock_rounded,
+                      size: 18,
+                      color: AppColors.textTertiary,
+                    ),
+                  ],
+                ),
+                Text(
+                  'Ação fixa, sempre no topo da tela. Marque o que ela desliga; '
+                  'o resto fica como está, como um motor com timer.',
+                  style: text.bodyMedium?.copyWith(fontSize: 15),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          _PillButton(
+            icon: Icons.lightbulb_outline_rounded,
+            label: 'Só as luzes',
+            onTap: () => _apply(layout.resetAllOff()),
+          ),
+        ],
+      );
+    } else {
+      final on = action.states.values.where((v) => v).length;
+      final off = action.states.length - on;
+      header = Row(
+        children: [
+          _IconBox(
+            icon: iconForScene(action.icon ?? '', name: action.name),
+            editable: true,
+            onTap: () => _pickActionIcon(action),
+          ),
+          const SizedBox(width: AppSpace.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _renameAction(action),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          action.name,
+                          style: text.headlineMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpace.sm),
+                      const Icon(
+                        Icons.edit_rounded,
+                        size: 20,
+                        color: AppColors.textTertiary,
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  action.states.isEmpty
+                      ? 'Toque numa tecla para alternar: Acende, Apaga, Não mexe.'
+                      : '$on acende${on == 1 ? '' : 'm'}  ·  '
+                            '$off apaga${off == 1 ? '' : 'm'}  ·  '
+                            'o resto não mexe',
+                  style: text.bodyMedium?.copyWith(fontSize: 15),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          _PillButton(
+            icon: Icons.play_arrow_rounded,
+            label: 'Testar',
+            onTap: () {
+              c.runScene(action.toScene());
+              _toast('"${action.name}" executada');
+            },
+          ),
+          const SizedBox(width: AppSpace.sm),
+          _PillButton(
+            icon: Icons.delete_outline_rounded,
+            label: 'Excluir',
+            color: AppColors.danger,
+            onTap: () => _deleteAction(action),
+          ),
+        ],
+      );
+    }
+
+    Widget chip(String id, Channel ch) => action == null
+        ? _KeyChoice(
+            name: c.nameOf(id),
+            kind: ch.kind,
+            state: layout.inAllOff(ch) ? false : null,
+            onTap: () => _apply(layout.setAllOff(ch, !layout.inAllOff(ch))),
+          )
+        : _KeyChoice(
+            name: c.nameOf(id),
+            kind: ch.kind,
+            state: action.states[id],
+            onTap: () => _apply(
+              layout.setActionState(action.id, id, switch (action.states[id]) {
+                null => true,
+                true => false,
+                false => null,
+              }),
+            ),
+          );
+
+    return _Panel(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 22, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(padding: const EdgeInsets.only(right: 8), child: header),
+            const SizedBox(height: AppSpace.lg),
+            Expanded(
+              child: ListView(
+                key: PageStorageKey(_action),
+                padding: const EdgeInsets.only(right: 8, bottom: 8),
+                children: [
+                  for (final room in sections) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            iconForRoom(room.toRoom()),
+                            size: 18,
+                            color: AppColors.textTertiary,
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          _SectionLabel(room.name.toUpperCase()),
+                        ],
+                      ),
+                    ),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        for (final id in room.channelIds)
+                          if (c.channel(id) case final ch?) chip(id, ch),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpace.lg),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPanelTab() {
+    final mode = PanelModeScope.maybeOf(context);
+    if (mode == null) return const SizedBox.shrink();
+    final s = mode.settings;
+    final text = Theme.of(context).textTheme;
+
+    Widget section(String title, String subtitle, List<Widget> children) =>
+        _Panel(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: text.titleLarge),
+                const SizedBox(height: 4),
+                Text(subtitle, style: text.bodyMedium?.copyWith(fontSize: 15)),
+                const SizedBox(height: AppSpace.lg),
+                ...children,
+              ],
+            ),
+          ),
+        );
+
+    return ListView(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: section(
+                'Protetor de tela',
+                'Relógio em tela preta depois de um tempo sem uso. '
+                    'Um toque volta ao painel.',
+                [
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final m in PanelSettings.idleChoices)
+                        _Choice(
+                          label: m == 0 ? 'Nunca' : '$m min',
+                          selected: s.idleMinutes == m,
+                          onTap: () => mode.update(s.copyWith(idleMinutes: m)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpace.lg),
+                  _PillButton(
+                    icon: Icons.nightlight_round,
+                    label: 'Mostrar agora',
+                    onTap: mode.showSaver,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpace.lg),
+            Expanded(
+              child: section(
+                'Brilho',
+                'Em uso, segue o brilho do Android. No protetor, fica neste '
+                    'nível.',
+                [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.brightness_low_rounded,
+                        color: AppColors.textTertiary,
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: s.saverBrightness.clamp(0.01, 0.6),
+                          min: 0.01,
+                          max: 0.6,
+                          activeColor: AppColors.light,
+                          onChanged: (v) =>
+                              mode.update(s.copyWith(saverBrightness: v)),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 48,
+                        child: Text(
+                          '${(s.saverBrightness * 100).round()}%',
+                          textAlign: TextAlign.end,
+                          style: text.titleMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: s.nightDim,
+                    activeThumbColor: const Color(0xFF14110A),
+                    activeTrackColor: AppColors.light,
+                    onChanged: (v) => mode.update(s.copyWith(nightDim: v)),
+                    title: const Text('Mais escuro à noite'),
+                    subtitle: const Text('Das 22h às 6h'),
+                  ),
+                  TextButton.icon(
+                    onPressed: mode.bridge.openDisplaySettings,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('Brilho adaptativo do Android'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.lg),
+        section(
+          'Iniciar com o tablet',
+          'Com o Painel Casa como tela inicial, ele abre sozinho quando o tablet '
+              'liga e quando o botão Home é apertado.',
+          [
+            Row(
+              children: [
+                Icon(
+                  mode.isHome
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: mode.isHome ? AppColors.plug : AppColors.textTertiary,
+                ),
+                const SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: Text(
+                    mode.isHome
+                        ? 'O Painel Casa é a tela inicial do tablet.'
+                        : 'Ainda não é a tela inicial. Toque em "Definir" e '
+                              'escolha Painel Casa.',
+                    style: text.titleMedium,
+                  ),
+                ),
+                _PillButton(
+                  icon: Icons.home_rounded,
+                  label: mode.isHome ? 'Trocar' : 'Definir',
+                  onTap: mode.bridge.openHomeSettings,
+                ),
+                const SizedBox(width: AppSpace.sm),
+                _PillButton(
+                  icon: Icons.settings_rounded,
+                  label: 'Ajustes do Android',
+                  onTap: mode.bridge.openSettings,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -461,14 +970,16 @@ class _LayoutEditorPageState extends State<LayoutEditorPage> {
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.customized,
+    required this.tab,
+    required this.onTab,
     required this.onBack,
-    required this.onAddRoom,
     required this.onReset,
   });
 
   final bool customized;
+  final int tab;
+  final ValueChanged<int> onTab;
   final VoidCallback onBack;
-  final VoidCallback onAddRoom;
   final VoidCallback onReset;
 
   @override
@@ -495,27 +1006,241 @@ class _TopBar extends StatelessWidget {
             children: [
               Text('Personalizar painel', style: text.headlineMedium),
               Text(
-                'Só muda o que aparece no tablet. As mudanças são salvas na hora.',
+                'Salvo na hora, só neste tablet.',
                 style: text.bodyMedium?.copyWith(fontSize: 15),
               ),
             ],
           ),
         ),
-        if (customized) ...[
+        _Tabs(
+          selected: tab,
+          labels: const ['Cômodos', 'Ações', 'Painel'],
+          icons: const [
+            Icons.grid_view_rounded,
+            Icons.auto_awesome_rounded,
+            Icons.tablet_rounded,
+          ],
+          onSelect: onTab,
+        ),
+        if (customized && tab == 0) ...[
+          const SizedBox(width: AppSpace.md),
           _PillButton(
             icon: Icons.restart_alt_rounded,
-            label: 'Restaurar Smart Life',
+            label: 'Restaurar',
             onTap: onReset,
           ),
-          const SizedBox(width: AppSpace.sm),
         ],
-        _PillButton(
-          icon: Icons.add_rounded,
-          label: 'Novo cômodo',
-          highlight: true,
-          onTap: onAddRoom,
-        ),
       ],
+    );
+  }
+}
+
+class _Choice extends StatelessWidget {
+  const _Choice({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: selected
+        ? AppColors.light.withValues(alpha: 0.16)
+        : AppColors.surfaceRaised,
+    shape: StadiumBorder(
+      side: BorderSide(
+        color: selected ? AppColors.light : AppColors.border,
+        width: selected ? 1.5 : 1,
+      ),
+    ),
+    child: InkWell(
+      customBorder: const StadiumBorder(),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _Tabs extends StatelessWidget {
+  const _Tabs({
+    required this.selected,
+    required this.labels,
+    required this.icons,
+    required this.onSelect,
+  });
+
+  final int selected;
+  final List<String> labels;
+  final List<IconData> icons;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (i, label) in labels.indexed)
+          Material(
+            color: i == selected ? AppColors.surfaceHigh : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              onTap: () => onSelect(i),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      icons[i],
+                      size: 18,
+                      color: i == selected
+                          ? AppColors.light
+                          : AppColors.textTertiary,
+                    ),
+                    const SizedBox(width: AppSpace.sm),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: i == selected
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// One key in an action: turned on (true), off (false) or left alone (null).
+class _KeyChoice extends StatelessWidget {
+  const _KeyChoice({
+    required this.name,
+    required this.kind,
+    required this.state,
+    required this.onTap,
+  });
+
+  final String name;
+  final DeviceKind kind;
+  final bool? state;
+  final VoidCallback onTap;
+
+  static const _offColor = Color(0xFF9FB3CF);
+
+  @override
+  Widget build(BuildContext context) {
+    final light = kind == DeviceKind.light;
+    final (Color color, String label, IconData mark) = switch (state) {
+      true => (
+        AppColors.forKind(kind),
+        light ? 'Acende' : 'Liga',
+        Icons.check_circle_rounded,
+      ),
+      false => (
+        _offColor,
+        light ? 'Apaga' : 'Desliga',
+        Icons.do_not_disturb_on_rounded,
+      ),
+      null => (
+        AppColors.textTertiary,
+        light ? 'Não mexe' : 'Fica como está',
+        Icons.circle_outlined,
+      ),
+    };
+    final active = state != null;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      width: 218,
+      height: 68,
+      decoration: BoxDecoration(
+        color: active ? color.withValues(alpha: 0.12) : AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: active ? color.withValues(alpha: 0.6) : AppColors.border,
+          width: active ? 1.5 : 1,
+        ),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Icon(
+                  switch ((kind, state)) {
+                    (DeviceKind.light, true) => Icons.lightbulb_rounded,
+                    (DeviceKind.light, _) => Icons.lightbulb_outline_rounded,
+                    (DeviceKind.plug, _) => Icons.power_rounded,
+                    (DeviceKind.pump, _) => Icons.water_drop_rounded,
+                    (DeviceKind.other, _) => Icons.toggle_on_rounded,
+                  },
+                  size: 20,
+                  color: active ? color : AppColors.textTertiary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: active
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        label,
+                        style: TextStyle(fontSize: 12.5, color: color),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(mark, size: 22, color: color),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -567,6 +1292,7 @@ class _RoomTile extends StatelessWidget {
     required this.onTap,
     required this.onDrop,
     this.muted = false,
+    this.locked = false,
   });
 
   /// Position in the reorderable list; null for the fixed "Ocultas" tile.
@@ -577,6 +1303,9 @@ class _RoomTile extends StatelessWidget {
   final bool selected;
   final String? dragging;
   final bool muted;
+
+  /// Fixed entry: shows a lock instead of a drag handle.
+  final bool locked;
   final bool Function(String channelId) accepts;
   final VoidCallback onTap;
   final ValueChanged<String> onDrop;
@@ -646,7 +1375,16 @@ class _RoomTile extends StatelessWidget {
                         ),
                       ),
                       _CountBadge(count),
-                      if (index case final i?)
+                      if (locked)
+                        const SizedBox(
+                          width: 44,
+                          child: Icon(
+                            Icons.lock_rounded,
+                            size: 18,
+                            color: AppColors.textTertiary,
+                          ),
+                        )
+                      else if (index case final i?)
                         ReorderableDragStartListener(
                           index: i,
                           child: const SizedBox(
@@ -1117,23 +1855,19 @@ class _PillButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.highlight = false,
     this.color,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final bool highlight;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final fg = highlight
-        ? const Color(0xFF2B1A00)
-        : (color ?? AppColors.textPrimary);
+    final fg = color ?? AppColors.textPrimary;
     return Material(
-      color: highlight ? AppColors.light : AppColors.surfaceHigh,
+      color: AppColors.surfaceHigh,
       borderRadius: BorderRadius.circular(AppRadius.pill),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.pill),

@@ -156,21 +156,26 @@ Future<bool> showConfirmDialog(
   return ok ?? false;
 }
 
-/// Picks one of [roomIcons]; returns its key.
-Future<String?> showIconPicker(BuildContext context, {String? selected}) {
+/// Picks one of [icons]; returns its key.
+Future<String?> showIconPicker(
+  BuildContext context, {
+  String? selected,
+  Map<String, IconData> icons = roomIcons,
+  String title = 'Ícone do cômodo',
+}) {
   return showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      title: const Text('Ícone do cômodo'),
+      title: Text(title),
       content: SizedBox(
         width: 460,
         child: Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
-            for (final MapEntry(:key, :value) in roomIcons.entries)
+            for (final MapEntry(:key, :value) in icons.entries)
               Material(
                 color: key == selected
                     ? AppColors.light.withValues(alpha: 0.2)

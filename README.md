@@ -56,7 +56,7 @@ lib/
   state/home_controller.dart  estado e ações (otimista, refresh, pushes)
   ui/                         telas e widgets (dashboard, cards, detalhe do cômodo,
                               settings/ = tela "Personalizar painel")
-test/                         58 testes: protocolo (vetores oficiais AES/GCM),
+test/                         66 testes: protocolo (vetores oficiais AES/GCM),
                               dispositivo simulado 3.3/3.4/3.5, repositório, estado
 tool/                         diagnósticos de linha de comando (ver docs/TABLET.md)
 ```
@@ -104,6 +104,6 @@ adb install build/app/outputs/flutter-apk/app-release.apk
 - [x] Primeiro teste no tablet
 - [x] Personalizar no próprio painel: cômodos, ordem, nomes e teclas ocultas (arrastar e soltar)
 - [ ] Tela de configuração (credenciais sem recompilar)
-- [ ] Cenas ("Boa noite", "Chegando em casa", "Apagar tudo")
-- [ ] Modo painel: protetor de tela com relógio, brilho automático, iniciar no boot
+- [x] Ações ("Apagar tudo" fixa + ações criadas no painel, como "Hora do jantar")
+- [x] Modo painel: protetor de tela com relógio, brilho automático, iniciar no boot
 - [ ] Controle de carga da bateria via tomada inteligente

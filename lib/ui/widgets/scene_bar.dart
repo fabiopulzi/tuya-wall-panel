@@ -71,7 +71,11 @@ class _SceneButtonState extends State<_SceneButton> {
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.xl - 4),
             child: Row(
               children: [
-                Icon(iconForScene(widget.scene.icon), size: 22, color: color),
+                Icon(
+                  iconForScene(widget.scene.icon, name: widget.scene.name),
+                  size: 22,
+                  color: color,
+                ),
                 const SizedBox(width: AppSpace.md - 2),
                 Text(
                   widget.scene.name,

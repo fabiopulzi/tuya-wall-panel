@@ -34,7 +34,9 @@ class HomeController extends ChangeNotifier {
   final Duration settleTime;
 
   String homeName = '';
-  List<Scene> scenes = const [];
+
+  /// Actions created in "Personalizar", shown above the rooms.
+  List<Scene> get scenes => [for (final a in _view.actions) a.toScene()];
   final Map<String, Channel> _channels = {};
   final Set<String> _pending = {};
 
@@ -181,7 +183,6 @@ class HomeController extends ChangeNotifier {
       final snap = await _repo.load();
       homeName = snap.homeName;
       _baseRooms = snap.rooms;
-      scenes = snap.scenes;
       _channels
         ..clear()
         ..addEntries(snap.channels.map((c) => MapEntry(c.id, c)));
@@ -232,15 +233,21 @@ class HomeController extends ChangeNotifier {
       if (c.kind == DeviceKind.light && c.online) set(c, on),
   ]);
 
-  /// Hidden keys are left alone: they mirror a key that is on the panel.
-  Future<void> allLightsOff() => Future.wait([
-    for (final c in visibleChannels)
-      if (c.kind == DeviceKind.light && c.isOn && c.online) set(c, false),
-  ]);
+  /// Whether "Apagar tudo" turns this key off (set in Personalizar).
+  bool inAllOff(Channel c) => _view.inAllOff(c);
+
+  /// Keys "Apagar tudo" would turn off right now.
+  Iterable<Channel> get allOffTargets =>
+      visibleChannels.where((c) => _view.inAllOff(c) && c.isOn && c.online);
+
+  /// "Apagar tudo": only the keys chosen for it (lights by default). Hidden
+  /// keys are left alone: they mirror a key that is on the panel.
+  Future<void> allLightsOff() =>
+      Future.wait([for (final c in allOffTargets.toList()) set(c, false)]);
 
   Future<void> runScene(Scene scene) => Future.wait([
     for (final MapEntry(:key, :value) in scene.actions.entries)
-      if (_channels[key] case final c?) set(c, value),
+      if (_channels[key] case final c? when c.online) set(c, value),
   ]);
 
   /// A device reported its own state over the LAN: authoritative and
@@ -262,7 +269,6 @@ class HomeController extends ChangeNotifier {
   void _applySnapshot(HomeSnapshot snap) {
     homeName = snap.homeName;
     _baseRooms = snap.rooms;
-    scenes = snap.scenes;
     final previous = Map.of(_channels);
     _channels
       ..clear()

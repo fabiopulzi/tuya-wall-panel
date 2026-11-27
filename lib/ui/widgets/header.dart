@@ -161,7 +161,10 @@ class _Status extends StatelessWidget {
             label: local > 0 ? 'Rede local $local/$total' : 'Via nuvem',
           ),
         const SizedBox(width: AppSpace.xs),
-        _AllOffButton(enabled: lights > 0, onPressed: controller.allLightsOff),
+        _AllOffButton(
+          enabled: controller.allOffTargets.isNotEmpty,
+          onPressed: controller.allLightsOff,
+        ),
         _SettingsButton(
           onPressed: () => LayoutEditorPage.open(context, controller),
         ),
